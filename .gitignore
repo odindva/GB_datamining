@@ -8,7 +8,11 @@ __pycache__/
 # C extensions
 *.so
 
+# lessons
+les*.py
+
 # Distribution / packaging
+categories/
 .Python
 build/
 develop-eggs/
