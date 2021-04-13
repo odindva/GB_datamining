@@ -1,5 +1,9 @@
+import re
+from urllib.parse import urljoin
+
 import scrapy
 import pymongo
+import base64
 
 
 class AutoYoulaSpider(scrapy.Spider):
@@ -14,6 +18,11 @@ class AutoYoulaSpider(scrapy.Spider):
     db_client = pymongo.MongoClient("mongodb://localhost:27017")
     db = db_client["gb_data_mining"]
     collection = db["auto_youla"]
+    re_patterns = {
+        'author': r"youlaId%22%2C%22([a-zA-Z|\d]+)%22%2C%22avatar",
+        'phone': r"phone%22%2C%22([a-zA-Z|\d]+)%3D%3D%22%2C%22",
+        'photos': r'%2F([a-zA-Z|\d]+.jpg)%22%[a-zA-Z|\d]+%22medium%',
+    }
 
     @staticmethod
     def _get_follow(response, selector_css, callback):
@@ -34,16 +43,33 @@ class AutoYoulaSpider(scrapy.Spider):
             'description': response.css('.AdvertCard_descriptionInner__KnuRi::text').extract_first(),
             'data-target-id': response.css(
                 'div.app_gridContentChildren__17ZMX .AdvertCard_pageContent__24SCy').attrib['data-target-id'],
-            # TODO: забрать все фотки
-            'photos': self._find_attrs('src', response.css(
-                'div.PhotoGallery_photoWrapper__3m7yM img.PhotoGallery_photoImage__2mHGn')),
+            'photos': self.get_value(response, 'photos'),
             'characteristics': self._get_characteristics(response.css(
                 'div.AdvertCard_specs__2FEHc div.AdvertSpecs_row__ljPcX')),
-            # TODO: забрать данные из карточки автора
-            'author': None,
-            'phone': None
+            'author': self.get_value(response, 'author'),
+            'phone': self.get_value(response, 'phone'),
         }
         self.collection.insert_one(data)
+
+    @staticmethod
+    def get_value(resp, key):
+        marker = "window.transitState = decodeURIComponent"
+        for script in resp.css("script"):
+            try:
+                if marker in script.css("::text").extract_first():
+                    re_pattern = re.compile(AutoYoulaSpider.re_patterns[key])
+                    result = re.findall(re_pattern, script.css("::text").extract_first())
+                    if not result:
+                        return None
+                    if key == 'author':
+                        return resp.urljoin(f"/user/{result[0]}").replace("auto.", "", 1)
+                    if key == 'phone':
+                        return base64.b64decode(base64.b64decode(result[0][:-2])).decode()
+                    if key == 'photos':
+                        return [f'{"https://static.am/automobile_m3/document/l/c/87/"}{str(item)}' for item in result]
+
+            except TypeError:
+                pass
 
     @staticmethod
     def _find_attrs(attr, selectors):
