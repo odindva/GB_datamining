@@ -14,7 +14,7 @@ if __name__ == "__main__":
     crawler_proc = CrawlerProcess(settings=crawler_settings)
     tags = [
         'python',
-        # 'programming'
+        'programming'
     ]
     crawler_proc.crawl(
         InstagramSpider,
